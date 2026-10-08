@@ -40,3 +40,54 @@ s3_client.upload_file(
     BUCKET_NAME,
     PREFIX_GOLD + "relatorio_pacotes_bloqueados.csv",
 )
+# 3 - mapa de calor (qual antena consome mais internet)
+# mbps médio de cada antena
+mapa = antenas.groupby("id_dispositivo")["mbps"].mean()
+mapa = mapa.reset_index()
+
+# quanto cada antena representa do total (em %)
+total = mapa["mbps"].sum()
+mapa["percentual_do_total"] = mapa["mbps"] / total * 100
+
+# a que mais consome fica em primeiro
+mapa = mapa.sort_values("percentual_do_total", ascending=False)
+mapa = mapa.round(2)
+
+mapa.to_csv("relatorio_mapa_de_calor.csv", index=False, sep=";")
+s3_client.upload_file(
+    "relatorio_mapa_de_calor.csv", BUCKET_NAME, PREFIX_GOLD + "relatorio_mapa_de_calor.csv"
+)
+
+# cruzando com o firewall: o que sai pela internet
+firewall_ok = firewall[firewall["mbps"] >= 0]
+print("Mbps médio das antenas (soma):", round(total, 4))
+print("Mbps médio de saída do firewall:", round(firewall_ok["mbps"].mean(), 4))
+
+# 4 - gargalo de saída (CPU do firewall x sessões ativas)
+
+# separa em dois grupos: CPU alta e CPU normal
+cpu_alta = firewall[firewall["cpu_usage"] > 80]
+cpu_normal = firewall[firewall["cpu_usage"] <= 80]
+
+# correlação: perto de 1 = quando as sessões sobem, a CPU sobe junto
+correlacao = firewall["cpu_usage"].corr(firewall["active_sessions"])
+
+gargalo = pd.DataFrame(
+    {
+        "situacao": ["CPU acima de 80%", "CPU até 80%"],
+        "sessoes_ativas_medias": [
+            cpu_alta["active_sessions"].mean(),
+            cpu_normal["active_sessions"].mean(),
+        ],
+        "qtd_medicoes": [len(cpu_alta), len(cpu_normal)],
+        "correlacao_cpu_sessoes": [correlacao, correlacao],
+    }
+)
+gargalo = gargalo.round(2)
+
+gargalo.to_csv("relatorio_gargalo_saida.csv", index=False, sep=";")
+s3_client.upload_file(
+    "relatorio_gargalo_saida.csv", BUCKET_NAME, PREFIX_GOLD + "relatorio_gargalo_saida.csv"
+)
+
+print("Relatórios enviados para a camada Gold!")

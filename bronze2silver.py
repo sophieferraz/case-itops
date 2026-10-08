@@ -59,13 +59,9 @@ def main():
 
     # a antena tem id_antena, o firewall nao, criamos uma coluna unica
     df["id_dispositivo"] = df["id_antena"].fillna("firewall")
-
     df["active_conn"] = df["active_conn"].fillna(0)
-
     df = calcular_vazao(df)
-
     df["status_carga"] = df.apply(definir_status, axis=1)
-
     df["timestamp"] = df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     buffer = io.StringIO()
